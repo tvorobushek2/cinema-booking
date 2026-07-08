@@ -1,0 +1,323 @@
+openapi: 3.0.3
+info:
+  title: Cinema Booking API
+  description: API для системы бронирования мест в кинотеатре
+  version: 1.0.0
+  contact:
+    name: Ilya & Kirill
+
+servers:
+  - url: http://localhost:8000/api
+    description: Local development
+
+tags:
+  - name: sessions-ilya
+    description: Эндпоинты Ильи (чтение сеансов и мест)
+  - name: bookings-kirill
+    description: Эндпоинты Кирилла (бронирование и оплата)
+
+paths:
+  # ============ ИЛЬЯ: Список сеансов ============
+  /sessions/:
+    get:
+      summary: Получить список всех сеансов
+      description: Возвращает список сеансов с кэшированием в Redis (TTL 10 мин)
+      tags: [sessions-ilya]
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+              example:
+                - id: 1
+                  title: "Дюна: Часть вторая"
+                  started_at: "2026-07-10T18:00:00Z"
+                  duration: 166
+                  hall_id: 1
+                  hall_name: "Зал IMAX"
+                - id: 2
+                  title: "Оппенгеймер"
+                  started_at: "2026-07-10T20:30:00Z"
+                  duration: 180
+                  hall_id: 2
+                  hall_name: "Большой зал"
+
+  # ============ ИЛЬЯ: Схема зала ============
+  /sessions/{id}/seats/:
+    get:
+      summary: Получить схему зала с статусами мест
+      description: Возвращает все места зала с текущими статусами (free/taken)
+      tags: [sessions-ilya]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID сеанса
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Схема зала
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeatWithStatus'
+              example:
+                - seat_id: 1
+                  row: 1
+                  number: 1
+                  type: "standard"
+                  price: 300.00
+                  status: "free"
+                - seat_id: 2
+                  row: 1
+                  number: 2
+                  type: "vip"
+                  price: 500.00
+                  status: "taken"
+        '404':
+          description: Сеанс не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============ КИРИЛЛ: Создание брони ============
+  /bookings/:
+    post:
+      summary: Создать бронь
+      description: Блокирует места на 15 минут. Использует транзакцию + FOR UPDATE
+      tags: [bookings-kirill]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCreate'
+            example:
+              user_id: 1
+              session_id: 1
+              seat_ids: [5, 6, 7]
+      responses:
+        '201':
+          description: Бронь создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                booking_id: 42
+                expires_at: "2026-07-10T18:15:00Z"
+                total_price: 900.00
+                status: "awaiting"
+        '400':
+          description: Неверный запрос (пустой список мест и т.д.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Сеанс или место не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Конфликт — место уже занято
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictError'
+              example:
+                error: "Some seats are already booked"
+                occupied_seats: [6]
+
+  # ============ КИРИЛЛ: Оплата ============
+  /bookings/{id}/pay/:
+    post:
+      summary: Оплатить бронь
+      description: Имитация платежа. Меняет статус awaiting → paid
+      tags: [bookings-kirill]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 42
+      responses:
+        '200':
+          description: Оплата успешна
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "paid"
+                  booking_id:
+                    type: integer
+                    example: 42
+        '400':
+          description: Бронь уже оплачена или истекла
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Бронь не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============ КИРИЛЛ: Продление брони ============
+  /bookings/{id}/extend/:
+    post:
+      summary: Продлить бронь на 5 минут
+      description: Обновляет expires_at на +5 минут
+      tags: [bookings-kirill]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 42
+      responses:
+        '200':
+          description: Бронь продлена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  new_expires_at:
+                    type: string
+                    format: date-time
+                    example: "2026-07-10T18:20:00Z"
+        '400':
+          description: Бронь уже оплачена или истекла
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Session:
+      type: object
+      required: [id, title, started_at, duration, hall_id, hall_name]
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "Дюна: Часть вторая"
+        started_at:
+          type: string
+          format: date-time
+          example: "2026-07-10T18:00:00Z"
+        duration:
+          type: integer
+          description: Длительность в минутах
+          example: 166
+        hall_id:
+          type: integer
+          example: 1
+        hall_name:
+          type: string
+          example: "Зал IMAX"
+
+    SeatWithStatus:
+      type: object
+      required: [seat_id, row, number, type, price, status]
+      properties:
+        seat_id:
+          type: integer
+          example: 1
+        row:
+          type: integer
+          example: 1
+        number:
+          type: integer
+          example: 5
+        type:
+          type: string
+          enum: [standard, vip]
+          example: "vip"
+        price:
+          type: number
+          format: float
+          example: 500.00
+        status:
+          type: string
+          enum: [free, taken]
+          description: "free — свободно, taken — занято (оплачено или в ожидании)"
+          example: "free"
+
+    BookingCreate:
+      type: object
+      required: [user_id, session_id, seat_ids]
+      properties:
+        user_id:
+          type: integer
+          description: ID пользователя (заглушка)
+          example: 1
+        session_id:
+          type: integer
+          example: 1
+        seat_ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+          example: [5, 6, 7]
+
+    BookingResponse:
+      type: object
+      properties:
+        booking_id:
+          type: integer
+          example: 42
+        expires_at:
+          type: string
+          format: date-time
+          description: Время истечения брони (created_at + 15 мин)
+          example: "2026-07-10T18:15:00Z"
+        total_price:
+          type: number
+          format: float
+          example: 900.00
+        status:
+          type: string
+          enum: [awaiting, paid, expired]
+          example: "awaiting"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Booking not found"
+
+    ConflictError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Some seats are already booked"
+        occupied_seats:
+          type: array
+          items:
+            type: integer
+          example: [6]
