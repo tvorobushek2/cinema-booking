@@ -1,0 +1,56 @@
+version: '3.9'
+
+services:
+  # PostgreSQL — база данных
+  db:
+    image: postgres:15-alpine
+    container_name: cinema_db
+    restart: always
+    environment:
+      POSTGRES_DB: cinema
+      POSTGRES_USER: cinema_user
+      POSTGRES_PASSWORD: cinema_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cinema_user -d cinema"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis — кэш и брокер для Celery
+  redis:
+    image: redis:7-alpine
+    container_name: cinema_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Django приложение (будет добавлено позже)
+  # web:                    ← ЗАКОММЕНТИРОВАНО
+  #   build: ../backend
+  #   container_name: cinema_web
+  #   command: python manage.py runserver 0.0.0.0:8000
+  #   volumes:
+  #     - ../backend:/app
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     - DATABASE_URL=postgres://cinema_user:cinema_pass@db:5432/cinema
+  #     - REDIS_URL=redis://redis:6379/0
+  #     - DEBUG=True
+
+volumes:
+  pgdata:
