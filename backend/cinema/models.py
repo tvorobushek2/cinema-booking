@@ -113,3 +113,72 @@ class Session(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.started_at.strftime('%d.%m.%Y %H:%M')})"
+
+from django.utils import timezone
+from datetime import timedelta
+
+
+class Booking(models.Model):
+    """Бронь места на сеанс"""
+    STATUS_CHOICES = [
+        ('awaiting', 'Ожидает оплаты'),
+        ('paid', 'Оплачена'),
+        ('expired', 'Истекла'),
+    ]
+
+    user_id = models.IntegerField(
+        help_text="ID пользователя (заглушка)"
+    )
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name='bookings',
+        help_text="Сеанс"
+    )
+    seat = models.ForeignKey(
+        Seat,
+        on_delete=models.CASCADE,
+        related_name='bookings',
+        help_text="Место"
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='awaiting',
+        help_text="Статус брони"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Время создания"
+    )
+    expires_at = models.DateTimeField(
+        help_text="Время истечения брони"
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Бронь'
+        verbose_name_plural = 'Брони'
+        # Защита от дублей на уровне Django
+        constraints = [
+            models.UniqueConstraint(
+                fields=['session', 'seat'],
+                condition=models.Q(status__in=['awaiting', 'paid']),
+                name='unique_active_booking'
+            )
+        ]
+
+    def __str__(self):
+        return f"Бронь #{self.id} - {self.session.title} - Место {self.seat}"
+
+    def is_expired(self):
+        """Проверяет, истекла ли бронь"""
+        return self.status == 'awaiting' and timezone.now() > self.expires_at
+
+    def expire_if_needed(self):
+        """Автоматически меняет статус на expired, если время вышло"""
+        if self.is_expired():
+            self.status = 'expired'
+            self.save(update_fields=['status'])
+            return True
+        return False
