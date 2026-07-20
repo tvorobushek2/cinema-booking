@@ -10,6 +10,14 @@ class SessionSerializer(serializers.ModelSerializer):
         model = Session
         fields = ['id', 'title', 'started_at', 'duration', 'hall_id', 'hall_name']
 
+class SessionSerializer(serializers.ModelSerializer):
+    """Сериализатор для списка сеансов"""
+    hall_name = serializers.CharField(source='hall.name', read_only=True)
+    
+    class Meta:
+        model = Session
+        fields = ['id', 'title', 'poster', 'started_at', 'duration', 'hall_id', 'hall_name']
+
 
 class SeatSerializer(serializers.ModelSerializer):
     """Сериализатор для места с информацией о ряде и зале"""

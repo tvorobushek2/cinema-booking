@@ -159,7 +159,12 @@ REST_FRAMEWORK = {
     ],
 }
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = True  # Только для разработки!
+CORS_ALLOW_ALL_ORIGINS = True  # Для разработки
+
+# Или конкретные origins:
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+# ]
 
 # Cache settings
 CACHES = {

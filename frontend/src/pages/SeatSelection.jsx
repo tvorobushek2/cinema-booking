@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getSessionSeats, createBooking } from '../services/api';
+import { getSessionSeats, createBooking, getSessions } from '../services/api';
+import './SessionsList.css';
 
 function SeatSelection() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const [seats, setSeats] = useState([]);
+  const [sessionInfo, setSessionInfo] = useState(null);
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,16 +16,22 @@ function SeatSelection() {
     fetchSeats();
   }, [sessionId]);
 
-  const fetchSeats = async () => {
-    try {
-      const response = await getSessionSeats(sessionId);
-      setSeats(response.data);
-      setLoading(false);
-    } catch (err) {
-      setError('Ошибка загрузки мест');
-      setLoading(false);
-    }
-  };
+const fetchSeats = async () => {
+  try {
+    const response = await getSessionSeats(sessionId);
+    setSeats(response.data);
+    
+    // Получаем информацию о сеансе
+    const sessionsResponse = await getSessions();
+    const session = sessionsResponse.data.find(s => s.id === parseInt(sessionId));
+    setSessionInfo(session);
+    
+    setLoading(false);
+  } catch (err) {
+    setError('Ошибка загрузки мест');
+    setLoading(false);
+  }
+};
 
   const toggleSeat = (seat) => {
     if (seat.status === 'taken') return;
@@ -46,7 +54,7 @@ function SeatSelection() {
 
     try {
       const response = await createBooking({
-        user_id: 1, // Заглушка
+        user_id: 1,
         session_id: parseInt(sessionId),
         seat_ids: selectedSeats.map(s => s.seat_id)
       });
@@ -61,7 +69,6 @@ function SeatSelection() {
   if (loading) return <div className="loading">Загрузка...</div>;
   if (error) return <div className="error">{error}</div>;
 
-  // Группируем места по рядам
   const rows = {};
   seats.forEach(seat => {
     if (!rows[seat.row]) rows[seat.row] = [];
@@ -71,7 +78,26 @@ function SeatSelection() {
   return (
     <div className="seat-selection">
       <h1>Выбор мест</h1>
-      
+      {/* Постер фильма */}
+{sessionInfo && (
+  <div className="movie-poster">
+    {sessionInfo.poster ? (
+      <img src={sessionInfo.poster} alt={sessionInfo.title} />
+    ) : (
+      <div className="poster-placeholder"></div>
+    )}
+    <div className="movie-info">
+      <h2>{sessionInfo.title}</h2>
+      <p>{sessionInfo.hall_name} • {sessionInfo.duration} мин</p>
+      <p>{new Date(sessionInfo.started_at).toLocaleString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        hour: '2-digit',
+        minute: '2-digit'
+      })}</p>
+    </div>
+  </div>
+)}
       <div className="screen">ЭКРАН</div>
 
       <div className="seats-container">
@@ -95,6 +121,25 @@ function SeatSelection() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="seat-legend">
+        <div className="legend-item">
+          <div className="legend-seat free"></div>
+          <span>Свободно</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-seat vip"></div>
+          <span>VIP</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-seat taken"></div>
+          <span>Занято</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-seat selected"></div>
+          <span>Выбрано</span>
+        </div>
       </div>
 
       <div className="booking-summary">

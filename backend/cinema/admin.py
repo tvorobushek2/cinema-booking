@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Hall, Row, Seat, Session
+from .models import Hall, Row, Seat, Session, Booking
 
 
 @admin.register(Hall)
@@ -28,3 +28,11 @@ class SessionAdmin(admin.ModelAdmin):
     list_filter = ['hall', 'started_at']
     ordering = ['started_at']
     date_hierarchy = 'started_at'
+
+
+@admin.register(Booking)
+class BookingAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user_id', 'session', 'seat', 'status', 'created_at', 'expires_at']
+    list_filter = ['status', 'session', 'created_at']
+    ordering = ['-created_at']
+    readonly_fields = ['created_at', 'expires_at']

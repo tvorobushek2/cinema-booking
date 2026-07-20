@@ -98,6 +98,30 @@ class Session(models.Model):
         max_length=200,
         help_text="Название фильма"
     )
+class Session(models.Model):
+    """Сеанс фильма"""
+    hall = models.ForeignKey(
+        Hall,
+        on_delete=models.RESTRICT,
+        related_name='sessions',
+        help_text="Зал"
+    )
+    title = models.CharField(
+        max_length=200,
+        help_text="Название фильма"
+    )
+    poster = models.URLField(
+        blank=True,
+        null=True,
+        help_text="URL постера фильма"
+    )
+    started_at = models.DateTimeField(
+        help_text="Время начала сеанса"
+    )
+    duration = models.IntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Длительность в минутах"
+    )
     started_at = models.DateTimeField(
         help_text="Время начала сеанса"
     )
