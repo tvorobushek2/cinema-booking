@@ -1,0 +1,65 @@
+ 
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cinema_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DJANGO_SETTINGS_MODULE=cinema.settings
+      - PYTHONPATH=/app:/frontend
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+      - ../frontend:/frontend
+
+  worker:
+    build: .
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DJANGO_SETTINGS_MODULE=cinema.settings
+      - PYTHONPATH=/app:/frontend
+    command: celery -A cinema worker --loglevel=info
+    volumes:
+      - .:/app
+      - ../frontend:/frontend
+
+  beat:
+    build: .
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DJANGO_SETTINGS_MODULE=cinema.settings
+      - PYTHONPATH=/app:/frontend
+    command: celery -A cinema beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/app
+      - ../frontend:/frontend
+
+volumes:
+  postgres_data:
